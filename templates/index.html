@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Speech Separation — Demo</title>
+<style>
+/* ── Reset ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Tokens ─────────────────────────────────────────────────── */
+:root {
+  --bg:        #0a0a0a;
+  --surface:   #111111;
+  --surface-2: #1a1a1a;
+  --surface-3: #222222;
+  --border:    #2a2a2a;
+  --border-2:  #333333;
+  --text:      #e8e8e8;
+  --text-2:    #999999;
+  --text-3:    #555555;
+  --accent:    #2563eb;
+  --accent-h:  #1d4ed8;
+  --accent-s:  rgba(37,99,235,.12);
+  --green:     #16a34a;
+  --green-s:   rgba(22,163,74,.1);
+  --red:       #dc2626;
+  --red-s:     rgba(220,38,38,.1);
+  --amber:     #d97706;
+  --amber-s:   rgba(217,119,6,.1);
+  --radius:    6px;
+  --radius-lg: 10px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+html { font-size: 15px; -webkit-font-smoothing: antialiased; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ── Layout ─────────────────────────────────────────────────── */
+.page { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ── Top nav ─────────────────────────────────────────────────── */
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  height: 52px;
+  display: flex;
+  align-items: center;
+}
+.topnav-inner {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.wordmark {
+  font-size: .88rem;
+  font-weight: 700;
+  letter-spacing: -.2px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.wordmark .tag {
+  font-size: .65rem;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+  margin-left: 6px;
+  letter-spacing: .4px;
+}
+.nav-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.nav-item {
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  border: 1px solid transparent;
+  user-select: none;
+  white-space: nowrap;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text); }
+.nav-item.active {
+  background: var(--surface-3);
+  color: var(--text);
+  border-color: var(--border-2);
+}
+.model-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.model-selector .label {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .9px;
+  color: var(--text-3);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.model-selector select {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 5px 10px;
+  font-size: .78rem;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.model-selector select:focus { border-color: var(--accent); }
+.model-status {
+  font-size: .7rem;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.model-status.ok { color: var(--green); }
+
+/* ── Content ─────────────────────────────────────────────────── */
+.content {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 24px 60px;
+}
+.content-header { margin-bottom: 32px; }
+.content-header h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -.4px;
+  color: var(--text);
+}
+.content-header p {
+  font-size: .85rem;
+  color: var(--text-2);
+  margin-top: 6px;
+}
+
+/* ── Panels (mode panes) ─────────────────────────────────────── */
+.pane { display: none; }
+.pane.active { display: block; }
+
+/* ── Section ─────────────────────────────────────────────────── */
+.section { margin-bottom: 28px; }
+.section-title {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 12px;
+}
+
+/* ── Card ───────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+}
+.card + .card { margin-top: 12px; }
+.card-label {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-label .index {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  border: 1px solid var(--border-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .65rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+/* ── Two-col ─────────────────────────────────────────────────── */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+/* ── Recorder ───────────────────────────────────────────────── */
+.recorder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 28px 20px;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius);
+  text-align: center;
+  transition: border-color .2s;
+}
+.recorder.recording { border-color: var(--red); border-style: solid; }
+.recorder.has-audio  { border-color: var(--green); border-style: solid; }
+
+.rec-btn {
+  padding: 9px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: background .12s, border-color .12s;
+  min-width: 140px;
+}
+.rec-btn:hover { background: var(--surface-3); border-color: var(--border-2); }
+.rec-btn.recording {
+  background: var(--red-s);
+  border-color: var(--red);
+  color: var(--red);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.65} }
+
+.rec-timer {
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--red);
+  min-height: 18px;
+  font-weight: 600;
+}
+.rec-hint { font-size: .72rem; color: var(--text-3); }
+.rec-clear {
+  font-size: .72rem;
+  color: var(--text-3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  display: none;
+}
+.rec-clear:hover { color: var(--red); }
+.recorder.has-audio .rec-clear { display: inline; }
+
+audio.rec-player {
+  width: 100%;
+  border-radius: var(--radius);
+  margin-top: 2px;
+}
+
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .72rem;
+  color: var(--text-3);
+}
+.upload-link {
+  font-size: .72rem;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.upload-link:hover { color: var(--accent-h); }
+
+/* ── Divider ─────────────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 20px;
+  border-radius: var(--radius);
+  border: none;
+  font-size: .82rem;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: opacity .14s, background .14s;
+  white-space: nowrap;
+}
+.btn:active { opacity: .85; }
+.btn:disabled { opacity: .3; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-h); }
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-2);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--surface-3); }
+
+.btn-full { width: 100%; }
+.btn-row { display: flex; gap: 10px; }
+
+/* ── Status ─────────────────────────────────────────────────── */
+.status {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: .78rem;
+  font-family: var(--font-mono);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+}
+.status.error   { background: var(--red-s);   color: var(--red);   border-color: rgba(220,38,38,.25); }
+.status.success { background: var(--green-s);  color: var(--green); border-color: rgba(22,163,74,.25); }
+.status.loading { background: var(--accent-s); color: #60a5fa;      border-color: rgba(37,99,235,.25); }
+
+/* ── Result ─────────────────────────────────────────────────── */
+.result {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  margin-top: 20px;
+}
+.result-header {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 16px;
+}
+.result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 600px) { .result-grid { grid-template-columns: 1fr; } }
+.result-item .rl {
+  font-size: .7rem;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  letter-spacing: .4px;
+}
+.result-item audio { width: 100%; border-radius: var(--radius); }
+
+/* ── Mix preview ─────────────────────────────────────────────── */
+.mix-preview {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+.mix-preview .rl {
+  font-size: .7rem;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.mix-preview audio { width: 100%; border-radius: var(--radius); }
+
+/* ── History ─────────────────────────────────────────────────── */
+.history {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 22px;
+  margin-top: 32px;
+}
+.history-header {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 14px;
+}
+.history-list { display: flex; flex-direction: column; gap: 6px; }
+.history-item {
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.history-item .h-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.history-item .h-row:hover { background: var(--surface-3); }
+.history-item .h-model {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent-s);
+  color: #60a5fa;
+  border: 1px solid rgba(37,99,235,.2);
+  white-space: nowrap;
+  font-weight: 700;
+}
+.history-item .h-label {
+  font-size: .75rem;
+  color: var(--text-2);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.history-item .h-time {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.history-item .h-chevron {
+  font-size: .7rem;
+  color: var(--text-3);
+  transition: transform .2s;
+  flex-shrink: 0;
+}
+.history-item.open .h-chevron { transform: rotate(180deg); }
+.history-players {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+}
+.history-item.open .history-players { display: flex; }
+.history-players .hp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.history-players .hp-grid {
+  display: grid;
+  gap: 10px;
+}
+.history-players .hp-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.history-players .hp-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+@media (max-width: 600px) {
+  .history-players .hp-grid.cols-2,
+  .history-players .hp-grid.cols-3 { grid-template-columns: 1fr; }
+}
+.history-players .hp-track { display: flex; flex-direction: column; gap: 4px; }
+.history-players .hp-label {
+  font-size: .62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+}
+.history-players audio {
+  width: 100%;
+  border-radius: var(--radius);
+  height: 32px;
+}
+.history-players .hp-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2px 0;
+}
+.history-empty {
+  font-size: .78rem;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  text-align: center;
+  padding: 10px 0;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .65s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+
+/* ── Waveform canvas ─────────────────────────────────────────── */
+.waveform {
+  width: 100%;
+  height: 56px;
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  display: none;
+  margin-top: 8px;
+}
+.waveform.visible { display: block; }
+.waveform-wrap { display: flex; flex-direction: column; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══════ TOP NAV ════════════════════════════════════════════ -->
+  <nav class="topnav">
+    <div class="topnav-inner">
+      <div class="wordmark">Speech Separation <span class="tag">DEMO</span></div>
+
+      <div class="nav-tabs">
+        <div class="nav-item active" data-pane="mode1" onclick="switchPane('mode1', this)">Simultaneous</div>
+        <div class="nav-item" data-pane="mode2" onclick="switchPane('mode2', this)">Separate &amp; Mix</div>
+      </div>
+
+      <div class="model-selector">
+        <span class="label">Model</span>
+        <select id="modelSelect" onchange="onModelChange()">
+          <option value="ConvTasNet">ConvTasNet</option>
+          <option value="SepFormer">SepFormer</option>
+        </select>
+        <span class="model-status" id="modelStatus">Ready</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════ CONTENT ════════════════════════════════════════════ -->
+  <main class="content">
+
+    <!-- ─── Mode 1 ────────────────────────────────────────────── -->
+    <div class="pane active" id="mode1">
+      <div class="content-header">
+        <h1>Simultaneous Recording</h1>
+        <p>Both speakers talk at the same time into one microphone. Record or upload a mixed audio, then run separation.</p>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Input</div>
+        <div class="card">
+          <div class="card-label"><span class="index">1</span> Mixed Audio</div>
+          <div class="recorder" id="r1-box">
+            <button class="rec-btn" id="r1-btn" onclick="toggleRecord('r1')">Start Recording</button>
+            <div class="rec-timer" id="r1-timer"></div>
+            <div class="rec-hint">Both speakers should be audible in this recording</div>
+            <audio class="rec-player" id="r1-player" controls style="display:none;width:100%;"></audio>
+            <canvas class="waveform" id="r1-wave"></canvas>
+            <div class="upload-row">
+              or <label class="upload-link" for="r1-file">upload a file</label>
+              <input type="file" id="r1-file" accept="audio/*" style="display:none" onchange="handleUpload('r1',this)">
+              &nbsp;·&nbsp;<span class="rec-clear" onclick="clearRecorder('r1')">clear</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="r1-run" onclick="runMode1()" disabled>Run Separation</button>
+      </div>
+
+      <div class="status" id="r1-status" style="margin-top:12px;display:none;"></div>
+
+      <div class="result" id="r1-result" style="display:none;">
+        <div class="result-header">Separated Outputs</div>
+        <div class="result-grid">
+          <div class="result-item waveform-wrap">
+            <div class="rl">SPEAKER 01</div>
+            <audio id="r1-spk1" controls></audio>
+            <canvas class="waveform" id="r1-spk1-wave"></canvas>
+          </div>
+          <div class="result-item waveform-wrap">
+            <div class="rl">SPEAKER 02</div>
+            <audio id="r1-spk2" controls></audio>
+            <canvas class="waveform" id="r1-spk2-wave"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="history" id="hist1">
+        <div class="history-header">Run History</div>
+        <div class="history-list" id="hist1-list">
+          <div class="history-empty" id="hist1-empty">No runs yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Mode 2 ────────────────────────────────────────────── -->
+    <div class="pane" id="mode2">
+      <div class="content-header">
+        <h1>Separate &amp; Mix</h1>
+        <p>Record each speaker individually, mix their voices into a single track, then run separation to recover them.</p>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Step 1 — Record Each Speaker</div>
+        <div class="two-col">
+
+          <div class="card">
+            <div class="card-label"><span class="index">A</span> Person 1</div>
+            <div class="recorder" id="r2a-box">
+              <button class="rec-btn" id="r2a-btn" onclick="toggleRecord('r2a')">Record Person 1</button>
+              <div class="rec-timer" id="r2a-timer"></div>
+              <div class="rec-hint">Only Person 1 should speak</div>
+              <audio class="rec-player" id="r2a-player" controls style="display:none;width:100%;"></audio>
+              <canvas class="waveform" id="r2a-wave"></canvas>
+              <div class="upload-row">
+                or <label class="upload-link" for="r2a-file">upload</label>
+                <input type="file" id="r2a-file" accept="audio/*" style="display:none" onchange="handleUpload('r2a',this)">
+                &nbsp;·&nbsp;<span class="rec-clear" onclick="clearRecorder('r2a')">clear</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-label"><span class="index">B</span> Person 2</div>
+            <div class="recorder" id="r2b-box">
+              <button class="rec-btn" id="r2b-btn" onclick="toggleRecord('r2b')">Record Person 2</button>
+              <div class="rec-timer" id="r2b-timer"></div>
+              <div class="rec-hint">Only Person 2 should speak</div>
+              <audio class="rec-player" id="r2b-player" controls style="display:none;width:100%;"></audio>
+              <canvas class="waveform" id="r2b-wave"></canvas>
+              <div class="upload-row">
+                or <label class="upload-link" for="r2b-file">upload</label>
+                <input type="file" id="r2b-file" accept="audio/*" style="display:none" onchange="handleUpload('r2b',this)">
+                &nbsp;·&nbsp;<span class="rec-clear" onclick="clearRecorder('r2b')">clear</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Step 2 — Mix</div>
+        <button class="btn btn-secondary btn-full" id="mix-btn" onclick="runMix()" disabled>Mix Person 1 + Person 2</button>
+        <div class="status" id="mix-status" style="margin-top:10px;display:none;"></div>
+        <div class="mix-preview" id="mix-preview" style="display:none;">
+          <div class="rl">MIXTURE PREVIEW</div>
+          <audio id="mix-player" controls></audio>
+          <canvas class="waveform" id="mix-wave"></canvas>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="section">
+        <div class="section-title">Step 3 — Separate</div>
+        <button class="btn btn-primary" id="sep-btn" onclick="runMode2Sep()" disabled>Run Separation</button>
+        <div class="status" id="sep-status" style="margin-top:10px;display:none;"></div>
+      </div>
+
+      <div class="result" id="r2-result" style="display:none;">
+        <div class="result-header">Separated Outputs</div>
+        <div class="result-grid">
+          <div class="result-item waveform-wrap">
+            <div class="rl">SPEAKER 01</div>
+            <audio id="r2-spk1" controls></audio>
+            <canvas class="waveform" id="r2-spk1-wave"></canvas>
+          </div>
+          <div class="result-item waveform-wrap">
+            <div class="rl">SPEAKER 02</div>
+            <audio id="r2-spk2" controls></audio>
+            <canvas class="waveform" id="r2-spk2-wave"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="history" id="hist2">
+        <div class="history-header">Run History</div>
+        <div class="history-list" id="hist2-list">
+          <div class="history-empty" id="hist2-empty">No runs yet.</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ═══════ JS ═══════════════════════════════════════════════════ -->
+<script>
+// ── Waveform ────────────────────────────────────────────────────
+async function drawWaveform(canvas, source) {
+  if (!canvas) return;
+  try {
+    let arrayBuffer;
+    if (source instanceof Blob || source instanceof File) {
+      arrayBuffer = await source.arrayBuffer();
+    } else {
+      const res = await fetch(source);
+      arrayBuffer = await res.arrayBuffer();
+    }
+    const actx = new AudioContext();
+    const audioBuffer = await actx.decodeAudioData(arrayBuffer);
+    await actx.close();
+
+    const data = audioBuffer.getChannelData(0);
+    const W = 600, H = 56;
+    canvas.width = W;
+    canvas.height = H;
+
+    const cc = canvas.getContext('2d');
+    cc.fillStyle = getComputedStyle(document.documentElement)
+                     .getPropertyValue('--surface-3').trim() || '#222';
+    cc.fillRect(0, 0, W, H);
+
+    const step = Math.max(1, Math.floor(data.length / W));
+    const mid  = H / 2;
+
+    // subtle center line
+    cc.strokeStyle = 'rgba(255,255,255,.06)';
+    cc.lineWidth = 1;
+    cc.beginPath(); cc.moveTo(0, mid); cc.lineTo(W, mid); cc.stroke();
+
+    // waveform bars
+    cc.strokeStyle = '#3b82f6';
+    cc.lineWidth = 1.2;
+    cc.beginPath();
+    for (let x = 0; x < W; x++) {
+      let lo = 0, hi = 0;
+      for (let j = 0; j < step; j++) {
+        const v = data[x * step + j] ?? 0;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      const pad = 4;
+      cc.moveTo(x + 0.5, mid + lo * (mid - pad));
+      cc.lineTo(x + 0.5, mid + hi * (mid - pad));
+    }
+    cc.stroke();
+
+    canvas.classList.add('visible');
+  } catch (err) {
+    console.warn('drawWaveform:', err);
+  }
+}
+
+function clearWaveform(canvas) {
+  if (!canvas) return;
+  canvas.classList.remove('visible');
+  const cc = canvas.getContext('2d');
+  if (cc) cc.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ── Pane switching ─────────────────────────────────────────────
+function switchPane(id, el) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+}
+
+// ── Model selector ─────────────────────────────────────────────
+function onModelChange() {
+  document.getElementById('modelStatus').textContent = 'Ready';
+  document.getElementById('modelStatus').className = 'model-status';
+}
+
+// ── Recorder state ─────────────────────────────────────────────
+const R = {};
+
+async function toggleRecord(id) {
+  R[id]?.mediaRecorder?.state === 'recording' ? stopRecord(id) : await startRecord(id);
+}
+
+async function startRecord(id) {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { setStatus(`${id}-status`, 'Microphone access denied.', 'error'); return; }
+
+  const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+  const chunks = [];
+  mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  mr.onstop = () => {
+    const blob = new Blob(chunks, { type: 'audio/webm' });
+    R[id].blob = blob;
+    const player = document.getElementById(`${id}-player`);
+    player.src = URL.createObjectURL(blob);
+    player.style.display = 'block';
+    setBoxState(id, 'has-audio');
+    stream.getTracks().forEach(t => t.stop());
+    drawWaveform(document.getElementById(`${id}-wave`), blob);
+    onAudioReady(id);
+  };
+
+  mr.start(100);
+  R[id] = { mediaRecorder: mr, chunks, blob: null, t0: Date.now() };
+  setBoxState(id, 'recording');
+
+  const btn = document.getElementById(`${id}-btn`);
+  btn.textContent = 'Stop Recording';
+  btn.classList.add('recording');
+
+  R[id].timer = setInterval(() => {
+    const s = Math.floor((Date.now() - R[id].t0) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2,'0');
+    const ss = String(s % 60).padStart(2,'0');
+    document.getElementById(`${id}-timer`).textContent = `${mm}:${ss}`;
+  }, 500);
+}
+
+function stopRecord(id) {
+  clearInterval(R[id].timer);
+  document.getElementById(`${id}-timer`).textContent = '';
+  R[id].mediaRecorder.stop();
+  const btn = document.getElementById(`${id}-btn`);
+  btn.textContent = 'Re-record';
+  btn.classList.remove('recording');
+}
+
+function setBoxState(id, state) {
+  const box = document.getElementById(`${id}-box`);
+  box.classList.remove('recording','has-audio');
+  if (state) box.classList.add(state);
+}
+
+function handleUpload(id, input) {
+  if (!input.files[0]) return;
+  R[id] = R[id] || {};
+  R[id].blob = input.files[0];
+  const player = document.getElementById(`${id}-player`);
+  player.src = URL.createObjectURL(input.files[0]);
+  player.style.display = 'block';
+  setBoxState(id, 'has-audio');
+  drawWaveform(document.getElementById(`${id}-wave`), input.files[0]);
+  onAudioReady(id);
+}
+
+function onAudioReady(id) {
+  if (id === 'r1')  { document.getElementById('r1-run').disabled = false; }
+  if (id === 'r2a' || id === 'r2b') { checkMixReady(); }
+}
+
+function clearRecorder(id) {
+  // Stop any active recording first
+  if (R[id]?.mediaRecorder?.state === 'recording') stopRecord(id);
+
+  // Wipe state
+  R[id] = {};
+
+  // Reset player and waveform
+  const player = document.getElementById(`${id}-player`);
+  player.pause();
+  player.src = '';
+  player.style.display = 'none';
+  clearWaveform(document.getElementById(`${id}-wave`));
+
+  // Reset file input so same file can be re-selected
+  const fileInput = document.getElementById(`${id}-file`);
+  fileInput.value = '';
+
+  // Reset record button label
+  const btn = document.getElementById(`${id}-btn`);
+  btn.textContent = id === 'r1' ? 'Start Recording'
+                  : id === 'r2a' ? 'Record Person 1' : 'Record Person 2';
+  btn.classList.remove('recording');
+
+  // Reset timer
+  document.getElementById(`${id}-timer`).textContent = '';
+
+  // Remove border state
+  setBoxState(id, '');
+
+  // Disable action buttons that depended on this audio
+  if (id === 'r1') document.getElementById('r1-run').disabled = true;
+  if (id === 'r2a' || id === 'r2b') {
+    document.getElementById('mix-btn').disabled = true;
+    document.getElementById('sep-btn').disabled = true;
+    document.getElementById('mix-preview').style.display = 'none';
+  }
+}
+
+function checkMixReady() {
+  document.getElementById('mix-btn').disabled = !(R['r2a']?.blob && R['r2b']?.blob);
+}
+
+// ── Status helpers ─────────────────────────────────────────────
+function setStatus(id, msg, type = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status ' + type;
+  el.style.display = 'flex';
+}
+
+function setBtnLoading(id, loading, label) {
+  const btn = document.getElementById(id);
+  btn.disabled = loading;
+  if (loading) {
+    btn.innerHTML = '<div class="spinner"></div> Processing';
+  } else {
+    btn.textContent = label;
+  }
+}
+
+// ── History ─────────────────────────────────────────────────────
+function track(label, url) {
+  return `<div class="hp-track">
+    <div class="hp-label">${label}</div>
+    <audio src="${url}" controls preload="none"></audio>
+  </div>`;
+}
+
+function pushHistory(paneId, data) {
+  const listId = paneId === 'mode1' ? 'hist1-list' : 'hist2-list';
+  const emptyId = paneId === 'mode1' ? 'hist1-empty' : 'hist2-empty';
+  const empty = document.getElementById(emptyId);
+  if (empty) empty.remove();
+
+  let players = '';
+  if (data.mode === 'single') {
+    players = `
+      <div class="hp-grid cols-1">${track('INPUT (MIXED)', data.input_url)}</div>
+      <hr class="hp-divider">
+      <div class="hp-grid cols-2">
+        ${track('SPEAKER 01', data.spk1)}
+        ${track('SPEAKER 02', data.spk2)}
+      </div>`;
+  } else {
+    players = `
+      <div class="hp-grid cols-2">
+        ${track('PERSON 1 (ORIGINAL)', data.person1_url)}
+        ${track('PERSON 2 (ORIGINAL)', data.person2_url)}
+      </div>
+      <hr class="hp-divider">
+      <div class="hp-grid cols-1">${track('MIXTURE', data.mix_url)}</div>
+      <hr class="hp-divider">
+      <div class="hp-grid cols-2">
+        ${track('SPEAKER 01 (OUTPUT)', data.spk1)}
+        ${track('SPEAKER 02 (OUTPUT)', data.spk2)}
+      </div>`;
+  }
+
+  const div = document.createElement('div');
+  div.className = 'history-item';
+  div.innerHTML = `
+    <div class="h-row" onclick="toggleHistoryItem(this.parentElement)">
+      <span class="h-model">${data.model}</span>
+      <span class="h-label">${data.label}</span>
+      <span class="h-time">${data.elapsed}s</span>
+      <span class="h-chevron">▾</span>
+    </div>
+    <div class="history-players">${players}</div>`;
+  document.getElementById(listId).prepend(div);
+}
+
+function toggleHistoryItem(el) {
+  el.classList.toggle('open');
+}
+
+// ── Mode 1 ─────────────────────────────────────────────────────
+async function runMode1() {
+  const blob = R['r1']?.blob;
+  if (!blob) return;
+  const model = document.getElementById('modelSelect').value;
+  const fd = new FormData();
+  fd.append('audio', blob, 'input.wav');
+  fd.append('model', model);
+
+  setBtnLoading('r1-run', true);
+  setStatus('r1-status', 'Running separation...', 'loading');
+  document.getElementById('modelStatus').textContent = `Loading ${model}...`;
+
+  try {
+    const res  = await fetch('/api/separate/single', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+
+    document.getElementById('r1-spk1').src = data.spk1;
+    document.getElementById('r1-spk2').src = data.spk2;
+    document.getElementById('r1-result').style.display = 'block';
+    drawWaveform(document.getElementById('r1-spk1-wave'), data.spk1);
+    drawWaveform(document.getElementById('r1-spk2-wave'), data.spk2);
+    setStatus('r1-status', `Completed in ${data.elapsed}s`, 'success');
+    document.getElementById('modelStatus').textContent = `Loaded`;
+    document.getElementById('modelStatus').className = 'model-status ok';
+    pushHistory('mode1', { mode: 'single', model, label: data.label, elapsed: data.elapsed,
+      input_url: data.input_url, spk1: data.spk1, spk2: data.spk2 });
+  } catch (e) {
+    setStatus('r1-status', e.message, 'error');
+  } finally {
+    setBtnLoading('r1-run', false, 'Run Separation');
+    document.getElementById('r1-run').disabled = false;
+  }
+}
+
+// ── Mode 2 — Mix ───────────────────────────────────────────────
+let mixPath = null;
+let mixPerson1Url = null;
+let mixPerson2Url = null;
+
+async function runMix() {
+  const bA = R['r2a']?.blob, bB = R['r2b']?.blob;
+  if (!bA || !bB) return;
+  const fd = new FormData();
+  fd.append('person1', bA, 'p1.wav');
+  fd.append('person2', bB, 'p2.wav');
+
+  setBtnLoading('mix-btn', true);
+  setStatus('mix-status', 'Mixing...', 'loading');
+
+  try {
+    const res  = await fetch('/api/mix', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+
+    mixPath = data.mix_path;
+    mixPerson1Url = data.person1_url;
+    mixPerson2Url = data.person2_url;
+    document.getElementById('mix-player').src = data.mix;
+    document.getElementById('mix-preview').style.display = 'block';
+    drawWaveform(document.getElementById('mix-wave'), data.mix);
+    document.getElementById('sep-btn').disabled = false;
+    setStatus('mix-status', 'Mixture ready. Preview above, then run separation.', 'success');
+  } catch (e) {
+    setStatus('mix-status', e.message, 'error');
+  } finally {
+    setBtnLoading('mix-btn', false, 'Mix Person 1 + Person 2');
+    document.getElementById('mix-btn').disabled = false;
+  }
+}
+
+// ── Mode 2 — Separate ──────────────────────────────────────────
+async function runMode2Sep() {
+  if (!mixPath) return;
+  const model = document.getElementById('modelSelect').value;
+  const fd = new FormData();
+  fd.append('model', model);
+  fd.append('mix_path', mixPath);
+
+  setBtnLoading('sep-btn', true);
+  setStatus('sep-status', 'Running separation...', 'loading');
+  document.getElementById('modelStatus').textContent = `Loading ${model}...`;
+
+  try {
+    const res  = await fetch('/api/separate/mix', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Server error');
+
+    document.getElementById('r2-spk1').src = data.spk1;
+    document.getElementById('r2-spk2').src = data.spk2;
+    document.getElementById('r2-result').style.display = 'block';
+    drawWaveform(document.getElementById('r2-spk1-wave'), data.spk1);
+    drawWaveform(document.getElementById('r2-spk2-wave'), data.spk2);
+    setStatus('sep-status', `Completed in ${data.elapsed}s`, 'success');
+    document.getElementById('modelStatus').textContent = 'Loaded';
+    document.getElementById('modelStatus').className = 'model-status ok';
+    pushHistory('mode2', { mode: 'mix', model, label: data.label, elapsed: data.elapsed,
+      person1_url: data.person1_url || mixPerson1Url,
+      person2_url: data.person2_url || mixPerson2Url,
+      mix_url: data.mix_url, spk1: data.spk1, spk2: data.spk2 });
+  } catch (e) {
+    setStatus('sep-status', e.message, 'error');
+  } finally {
+    setBtnLoading('sep-btn', false, 'Run Separation');
+    document.getElementById('sep-btn').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
